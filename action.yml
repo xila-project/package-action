@@ -60,6 +60,9 @@ outputs:
   registry-entry-path:
     description: Path of the registry entry JSON; empty without `registry-entry-url`.
     value: ${{ steps.package.outputs.registry-entry-path }}
+  xila-package-path:
+    description: Absolute path of the `xila-package` executable the action installed (and checked against its SHA-256), for later steps that verify or inspect packages.
+    value: ${{ steps.install.outputs.executable }}
 
 runs:
   using: composite

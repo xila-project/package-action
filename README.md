@@ -62,6 +62,16 @@ deleted when the action ends, even on failure.
 | `package-sha256` | SHA-256 of the package |
 | `public-key-path` | Raw public key matching `signing-key` (empty when unsigned) |
 | `registry-entry-path` | Registry entry JSON (empty without `registry-entry-url`) |
+| `xila-package-path` | Absolute path of the `xila-package` executable the action installed and checked, for later steps (verifying the package, building a registry entry) |
+
+Later steps can reuse the installed executable instead of downloading it again:
+
+```yaml
+- run: '"$XILA_PACKAGE" verify "$PACKAGE" public.key'
+  env:
+    XILA_PACKAGE: ${{ steps.package.outputs.xila-package-path }}
+    PACKAGE: ${{ steps.package.outputs.package-path }}
+```
 
 ## Examples
 
