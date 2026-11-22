@@ -1,0 +1,28 @@
+name: Release
+
+# Pushing a tag vX.Y.Z moves the major tag vX to it, so that `uses: xila-project/package-action@vX`
+# follows the latest release of its series. Consumers may pin the full commit SHA instead.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+jobs:
+  major-tag:
+    name: Move the major tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: "Setup | Checkout"
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: true
+      - name: "Release | Move the major tag to the released commit"
+        run: |
+          major="${GITHUB_REF_NAME%%.*}"
+          git tag --force "$major" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$major"

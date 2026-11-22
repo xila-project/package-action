@@ -1,0 +1,1 @@
+{"$schema":"https://raw.githubusercontent.com/xila-project/package_manager/main/schemas/developer-manifest.schema.json","format_version":2,"name":"test.hello","version":"1.0.0","target":"wasm32-wasip1","xila_version":"0.1","capabilities":[],"application":{"entrypoint":"executables/hello.wasm","display_name":"test.hello","icon":"","show_in_launcher":true},"metadata":null}

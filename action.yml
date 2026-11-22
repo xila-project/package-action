@@ -1,0 +1,93 @@
+name: Xila package
+description: Build and sign a Xila application package (.xpk) with the pinned xila-package release, and optionally emit its registry entry.
+author: Alix ANNERAUD
+branding:
+  icon: package
+  color: blue
+
+inputs:
+  input-directory:
+    description: Directory holding `xila-package.json` and every payload file, as `xila-package bundle build` expects. Excludes `manifest`, `executable` and `executable-path`.
+    required: false
+    default: ""
+  manifest:
+    description: Path of the developer manifest (`xila-package.json` content). Use with `executable` and `executable-path` instead of `input-directory`.
+    required: false
+    default: ""
+  executable:
+    description: Path of the built executable (such as a `.wasm` file) to ship.
+    required: false
+    default: ""
+  executable-path:
+    description: Bundle-relative path the executable takes in the package; it must equal the manifest's application entry point, such as `executables/hello.wasm`.
+    required: false
+    default: ""
+  xila-version:
+    description: Minimum Xila version (`major.minor`) the manifest must declare; the job fails otherwise. Empty accepts whatever the manifest declares.
+    required: false
+    default: ""
+  signing-key:
+    description: Developer signing key, a base64 raw 32-byte Ed25519 seed, from a secret. Without it the package is built unsigned.
+    required: false
+    default: ""
+  output-directory:
+    description: Directory the package, its public key and its registry entry are written to.
+    required: false
+    default: xila-package
+  xila-package-version:
+    description: Release of `xila-package` to download from xila-project/package_manager, such as `0.4.0`. Its SHA-256 is verified.
+    required: false
+    default: 0.4.0
+  registry-entry-url:
+    description: HTTPS address the package will be downloaded from. When set (with `signing-key` and `registry-publisher`), the registry entry JSON of the package is written next to it.
+    required: false
+    default: ""
+  registry-publisher:
+    description: Developer key identifier (`keys/developers/<id>.json` in xila-project/registry) for the registry entry.
+    required: false
+    default: ""
+
+outputs:
+  package-path:
+    description: Path of the `.xpk` package.
+    value: ${{ steps.package.outputs.package-path }}
+  package-sha256:
+    description: SHA-256 of the package.
+    value: ${{ steps.package.outputs.package-sha256 }}
+  public-key-path:
+    description: Path of the raw public key matching `signing-key`; empty when unsigned.
+    value: ${{ steps.package.outputs.public-key-path }}
+  registry-entry-path:
+    description: Path of the registry entry JSON; empty without `registry-entry-url`.
+    value: ${{ steps.package.outputs.registry-entry-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install xila-package
+      id: install
+      shell: bash
+      run: '"$GITHUB_ACTION_PATH/scripts/install.sh"'
+      env:
+        XILA_PACKAGE_VERSION: ${{ inputs.xila-package-version }}
+
+    - name: Build and sign the package
+      id: package
+      shell: bash
+      run: '"$GITHUB_ACTION_PATH/scripts/package.sh"'
+      env:
+        XILA_PACKAGE_EXECUTABLE: ${{ steps.install.outputs.executable }}
+        XILA_PACKAGE_SIGNING_KEY: ${{ inputs.signing-key }}
+        INPUT_MANIFEST: ${{ inputs.manifest }}
+        INPUT_EXECUTABLE: ${{ inputs.executable }}
+        INPUT_EXECUTABLE_PATH: ${{ inputs.executable-path }}
+        INPUT_INPUT_DIRECTORY: ${{ inputs.input-directory }}
+        INPUT_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+        INPUT_XILA_VERSION: ${{ inputs.xila-version }}
+        INPUT_REGISTRY_ENTRY_URL: ${{ inputs.registry-entry-url }}
+        INPUT_REGISTRY_PUBLISHER: ${{ inputs.registry-publisher }}
+
+    - name: Delete the signing key
+      if: always()
+      shell: bash
+      run: rm -rf -- "${RUNNER_TEMP:?}/xila-package-action-key"

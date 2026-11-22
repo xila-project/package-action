@@ -1,0 +1,139 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: "Setup | Checkout"
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: "Lint | ShellCheck"
+        run: shellcheck scripts/*.sh tests/run.sh
+      - name: "Lint | actionlint"
+        run: |
+          bash <(curl --silent --show-error --location https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+  install:
+    name: Install script
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: "Setup | Checkout"
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: "Test | Install script against a local release"
+        run: tests/run.sh
+
+  package:
+    name: Package on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-latest]
+    steps:
+      - name: "Setup | Checkout"
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Setup | Install xila-package for the checks"
+        id: install
+        shell: bash
+        run: scripts/install.sh
+        env:
+          GITHUB_ACTION_PATH: ${{ github.workspace }}
+          XILA_PACKAGE_VERSION: "0.4.0"
+
+      - name: "Setup | Generate a throwaway test key and a Wasm fixture"
+        id: fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$XILA_PACKAGE" key generate "$RUNNER_TEMP/test.seed" "$RUNNER_TEMP/test.pub"
+          key="$(base64 < "$RUNNER_TEMP/test.seed" | tr -d '\n')"
+          echo "::add-mask::$key"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          # The smallest valid Wasm module: the magic number and the version.
+          printf '\0asm\1\0\0\0' > "$RUNNER_TEMP/hello.wasm"
+          mkdir -p "$RUNNER_TEMP/source/executables"
+          cp tests/fixtures/hello.json "$RUNNER_TEMP/source/xila-package.json"
+          cp "$RUNNER_TEMP/hello.wasm" "$RUNNER_TEMP/source/executables/hello.wasm"
+        env:
+          XILA_PACKAGE: ${{ steps.install.outputs.executable }}
+
+      - name: "Package | Signed package with a registry entry"
+        id: signed
+        uses: ./
+        with:
+          manifest: tests/fixtures/hello.json
+          executable: ${{ runner.temp }}/hello.wasm
+          executable-path: executables/hello.wasm
+          xila-version: "0.1"
+          signing-key: ${{ steps.fixture.outputs.key }}
+          output-directory: ${{ runner.temp }}/signed
+          registry-entry-url: https://example.org/test.hello-1.0.0-wasm32-wasip1.xpk
+          registry-publisher: test-key
+
+      - name: "Package | Unsigned package from an input directory"
+        id: unsigned
+        uses: ./
+        with:
+          input-directory: ${{ runner.temp }}/source
+          output-directory: ${{ runner.temp }}/unsigned
+
+      - name: "Package | Refuse a mismatching Xila version"
+        id: mismatch
+        uses: ./
+        with:
+          manifest: tests/fixtures/hello.json
+          executable: ${{ runner.temp }}/hello.wasm
+          executable-path: executables/hello.wasm
+          xila-version: "9.9"
+          output-directory: ${{ runner.temp }}/mismatch
+        continue-on-error: true
+
+      - name: "Test | Verify the outputs and the package"
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$MISMATCH_OUTCOME" = failure
+          test -f "$UNSIGNED_PATH"
+          test -z "$UNSIGNED_PUBLIC_KEY"
+          test -f "$PACKAGE_PATH"
+          test "$(basename "$PACKAGE_PATH")" = test.hello-1.0.0-wasm32-wasip1.xpk
+          if command -v sha256sum > /dev/null; then actual="$(sha256sum "$PACKAGE_PATH" | cut -d ' ' -f 1)"; else actual="$(shasum -a 256 "$PACKAGE_PATH" | cut -d ' ' -f 1)"; fi
+          test "$actual" = "$PACKAGE_SHA256"
+          "$XILA_PACKAGE" verify "$PACKAGE_PATH" "$RUNNER_TEMP/test.pub"
+          cmp "$PUBLIC_KEY_PATH" "$RUNNER_TEMP/test.pub"
+          "$XILA_PACKAGE" registry verify "$REGISTRY_ENTRY_PATH" "$PACKAGE_PATH" "$RUNNER_TEMP/test.pub"
+          # The signing key must not survive the action.
+          test ! -e "$RUNNER_TEMP/xila-package-action-key/seed"
+        env:
+          XILA_PACKAGE: ${{ steps.install.outputs.executable }}
+          PACKAGE_PATH: ${{ steps.signed.outputs.package-path }}
+          PACKAGE_SHA256: ${{ steps.signed.outputs.package-sha256 }}
+          PUBLIC_KEY_PATH: ${{ steps.signed.outputs.public-key-path }}
+          REGISTRY_ENTRY_PATH: ${{ steps.signed.outputs.registry-entry-path }}
+          MISMATCH_OUTCOME: ${{ steps.mismatch.outcome }}
+          UNSIGNED_PATH: ${{ steps.unsigned.outputs.package-path }}
+          UNSIGNED_PUBLIC_KEY: ${{ steps.unsigned.outputs.public-key-path }}

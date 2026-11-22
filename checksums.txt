@@ -1,0 +1,7 @@
+# Release, asset, SHA-256 of the published xila-package archives (xila-project/package_manager).
+# scripts/install.sh fails when a downloaded archive does not match its line here, in addition to
+# the release's own .sha256 asset. Add the lines of a release when raising the default version.
+0.4.0 xila-package-aarch64-apple-darwin.tar.gz c4e073b19bfcc73929235e71f7d8f0e0c480864b023b0ae4a8473b942cec550a
+0.4.0 xila-package-aarch64-unknown-linux-gnu.tar.gz cd6b012d54c828534168bf80ba394a1384857953e6ba86005a9639170158f09b
+0.4.0 xila-package-x86_64-pc-windows-msvc.zip ee18a8d6266a07956097f2c200629b97dc9ada97471596a59e6ef6a439800a14
+0.4.0 xila-package-x86_64-unknown-linux-gnu.tar.gz 02905040ef0c241c0cb6b006b729a0ee255b66b7e38ff938c8c12dac5df18554
